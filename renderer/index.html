@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Stickman Desktop</title>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+  <div id="ui">
+    <div>
+      <label>Rang: <input type="color" id="colorPicker" value="#0b66ff"></label>
+      <button id="drawBtn">Chiz</button>
+      <button id="uploadBtn">Upload Image</button>
+      <button id="autoRigBtn">Auto-rig</button>
+      <input id="nameInput" placeholder="Stickman nomi">
+      <button id="createBtn">Yarat</button>
+    </div>
+    <div>
+      <button id="toggleInteract">Interaction: ON</button>
+      <button id="spawnDemo">Spawn Demo</button>
+    </div>
+    <div id="notes">Hover your mouse near a stickman to interact.</div>
+  </div>
+
+  <canvas id="world"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
+ 
