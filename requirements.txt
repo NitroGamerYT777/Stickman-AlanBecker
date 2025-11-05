@@ -1,0 +1,3 @@
+PyQt6
+pymunk
+# Windows only: pywin32
