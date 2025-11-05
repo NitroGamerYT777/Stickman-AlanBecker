@@ -37,7 +37,19 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
+const Store = require('electron-store');
+Store.initRenderer();
+
 /* IPC: renderer -> main uchun misollar */
+ipcMain.on('save-stickmen', (event, stickmen) => {
+  const store = new Store();
+  store.set('stickmen', stickmen);
+});
+
+ipcMain.handle('load-stickmen', async () => {
+  const store = new Store();
+  return store.get('stickmen', []);
+});
 
 // Ochish: notepad yoki brauzer ochish
 ipcMain.handle('open-app', async (ev, appName) => {
@@ -73,5 +85,12 @@ ipcMain.handle('get-active-window', async () => {
   }
 });
 
+const robot = require('robotjs');
+
 // (Optional) System typing / sending input: implement only after you accept security risk
-// ipcMain.handle('send-keys', ... )  // we'll not implement by default
+ipcMain.on('type-string', (event, str) => {
+  // A small delay to allow the user to focus on a different window
+  setTimeout(() => {
+    robot.typeString(str);
+  }, 2000);
+});

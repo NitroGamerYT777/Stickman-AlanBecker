@@ -35,10 +35,10 @@ const stickmen = [];
 const colorPicker = document.getElementById('colorPicker');
 const drawBtn = document.getElementById('drawBtn');
 const doneDrawingBtn = document.getElementById('doneDrawingBtn');
-const uploadBtn = document.getElementById('uploadBtn');
-const autoRigBtn = document.getElementById('autoRigBtn');
+const startRiggingBtn = document.getElementById('startRiggingBtn');
+const riggingPanel = document.getElementById('rigging-panel');
+const finalizeRigBtn = document.getElementById('finalizeRigBtn');
 const nameInput = document.getElementById('nameInput');
-const createBtn = document.getElementById('createBtn');
 const toggleInteract = document.getElementById('toggleInteract');
 
 let interactionEnabled = true;
@@ -90,96 +90,158 @@ Events.on(render, 'afterRender', () => {
   });
 });
 
-autoRigBtn.addEventListener('click', () => {
-  if (drawnLines.length === 0) return;
+let riggingMode = false;
+let rigJoints = [];
+let currentJointType = 'head';
 
-  // 1. Find the torso (longest line)
-  let torsoLine = drawnLines.reduce((longest, line) => {
-    const length = distance(line[0], line[line.length - 1]);
-    if (length > (longest.length || 0)) {
-      return { line, length };
-    }
-    return longest;
-  }, { line: null, length: 0 }).line;
+doneDrawingBtn.addEventListener('click', () => {
+  drawingMode = false;
+  drawBtn.style.display = 'inline-block';
+  doneDrawingBtn.style.display = 'none';
+  startRiggingBtn.style.display = 'inline-block';
+});
 
-  if (!torsoLine) return;
+startRiggingBtn.addEventListener('click', () => {
+  riggingMode = true;
+  startRiggingBtn.style.display = 'none';
+  riggingPanel.style.display = 'block';
+});
 
-  // For now, just create the torso
-  const start = torsoLine[0];
-  const end = torsoLine[torsoLine.length - 1];
-  const length = distance(start, end);
-  const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-  const angle = Math.atan2(end.y - start.y, end.x - start.x);
-  const torso = Bodies.rectangle(center.x, center.y, 5, length, {
-    angle: angle,
-    render: { fillStyle: colorPicker.value }
+document.querySelectorAll('.rig-joint-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    currentJointType = e.target.dataset.joint;
+  });
+});
+
+canvas.addEventListener('click', (e) => {
+  if (!riggingMode) return;
+  rigJoints.push({ x: e.clientX, y: e.clientY, type: currentJointType });
+});
+
+Matter.Events.on(render, 'afterRender', () => {
+  const context = canvas.getContext('2d');
+  // ... (existing afterRender logic for drawing lines)
+
+  // Visualize rig joints
+  if (riggingMode) {
+    rigJoints.forEach(joint => {
+      context.beginPath();
+      context.arc(joint.x, joint.y, 5, 0, 2 * Math.PI);
+      context.fillStyle = 'red';
+      context.fill();
+    });
+  }
+});
+
+
+finalizeRigBtn.addEventListener('click', () => {
+  riggingMode = false;
+  riggingPanel.style.display = 'none';
+
+  if (drawnLines.length === 0 || rigJoints.length < 2) return; // Need at least 2 joints
+
+  // More advanced rigging logic
+  const parts = {}; // Store created bodies by joint type
+  const constraints = [];
+
+  // 1. Associate lines with the nearest joint
+  const jointMap = {};
+  rigJoints.forEach(joint => {
+    jointMap[joint.type] = jointMap[joint.type] || [];
+    jointMap[joint.type].push({ joint, lines: [] });
   });
 
-  Composite.add(engine.world, torso);
-
-
-  const remainingLines = drawnLines.filter(line => line !== torsoLine);
-
-  // Identify head (closest small line to the top of the torso)
-  const torsoTop = end.y < start.y ? end : start;
-  let headLine = null;
-  let minDistance = Infinity;
-
-  remainingLines.forEach(line => {
-    const lineCenter = { x: (line[0].x + line[line.length - 1].x) / 2, y: (line[0].y + line[line.length - 1].y) / 2 };
-    const dist = distance(torsoTop, lineCenter);
-    if (dist < minDistance && distance(line[0], line[line.length - 1]) < length * 0.5) {
-      minDistance = dist;
-      headLine = line;
+  drawnLines.forEach(line => {
+    const center = { x: (line[0].x + line[line.length - 1].x) / 2, y: (line[0].y + line[line.length - 1].y) / 2 };
+    let closestJointGroup = null;
+    let minDistance = Infinity;
+    Object.values(jointMap).forEach(jointGroup => {
+      jointGroup.forEach(entry => {
+        const dist = distance(center, entry.joint);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestJointGroup = entry;
+        }
+      });
+    });
+    if (closestJointGroup) {
+      closestJointGroup.lines.push(line);
     }
   });
 
-  if (headLine) {
-    const headCenter = { x: (headLine[0].x + headLine[headLine.length - 1].x) / 2, y: (headLine[0].y + headLine[headLine.length - 1].y) / 2 };
-    const headRadius = distance(headLine[0], headLine[headLine.length - 1]) / 2;
-    const head = Bodies.circle(headCenter.x, headCenter.y, headRadius, {
-      render: { fillStyle: colorPicker.value }
+  // 2. Create bodies for each joint group
+  Object.entries(jointMap).forEach(([type, group]) => {
+    group.forEach((entry, index) => {
+      if (entry.lines.length === 0) return;
+
+      const line = entry.lines[0]; // For simplicity, use the first line
+      const start = line[0];
+      const end = line[line.length-1];
+      const length = distance(start, end);
+      const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+      const angle = Math.atan2(end.y - start.y, end.x - start.x);
+
+      let body;
+      if (type === 'head') {
+        body = Bodies.circle(center.x, center.y, length / 2, { render: { fillStyle: colorPicker.value } });
+      } else {
+        body = Bodies.rectangle(center.x, center.y, 5, length, { angle, render: { fillStyle: colorPicker.value } });
+      }
+      parts[`${type}_${index}`] = body;
     });
-    const neck = Constraint.create({
-      bodyA: torso,
-      pointA: { x: 0, y: -length / 2 },
-      bodyB: head,
-      length: 10,
-      stiffness: 0.8
+  });
+
+  // 3. Create constraints (simple version: connect everything to the head)
+  const head = parts['head_0'];
+  if (head) {
+    Object.entries(parts).forEach(([key, part]) => {
+      if (key === 'head_0') return;
+      const constraint = Constraint.create({
+        bodyA: head,
+        bodyB: part,
+        stiffness: 0.2,
+        length: distance(head.position, part.position)
+      });
+      constraints.push(constraint);
     });
-    Composite.add(engine.world, [head, neck]);
   }
 
-  const limbLines = remainingLines.filter(line => line !== headLine);
+  const allParts = Object.values(parts);
+  Composite.add(engine.world, [...allParts, ...constraints]);
 
-  limbLines.forEach(line => {
-    const start = line[0];
-    const end = line[line.length - 1];
-    const length = distance(start, end);
-    const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    const angle = Math.atan2(end.y - start.y, end.x - start.x);
-    const limb = Bodies.rectangle(center.x, center.y, 5, length, {
-      angle: angle,
-      render: { fillStyle: colorPicker.value }
-    });
+  // Create the final stickman object
+  const newStickman = {
+    name: nameInput.value || ('Stick' + (stickmen.length + 1)),
+    color: colorPicker.value,
+    parts: [],
+    constraints: [],
+    attrs: {},
+    state: 'idle',
+    target: null,
+    lastHover: false,
+    memory: {},
+    // Store drawing data for saving/loading
+    drawing: {
+      lines: drawnLines,
+      joints: rigJoints,
+    }
+  };
 
-    // Find attachment point on torso
-    const attachPoint = { x: torso.position.x, y: center.y };
-    const torsoAttachPoint = { x: 0, y: center.y - torso.position.y };
+  const { parts, constraints } = createStickmanFromDrawing(drawnLines, rigJoints, colorPicker.value);
+  newStickman.parts = parts;
+  newStickman.constraints = constraints;
+  newStickman.attrs = personalityFromName(newStickman.name);
+  newStickman.memory = {
+    personality: newStickman.attrs,
+    learned: {},
+    goals: newStickman.attrs.goals,
+  };
 
-    const joint = Constraint.create({
-      bodyA: torso,
-      pointA: torsoAttachPoint,
-      bodyB: limb,
-      length: 20,
-      stiffness: 0.6
-    });
-
-    Composite.add(engine.world, [limb, joint]);
-  });
-
+  stickmen.push(newStickman);
 
   drawnLines = [];
+  rigJoints = [];
+  saveStickmenState();
 });
 
 function tickBehavior() {
@@ -191,19 +253,156 @@ function tickBehavior() {
 
 let mousePos = { x: -9999, y: -9999 };
 
-createBtn.addEventListener('click', () => {
-  const color = colorPicker.value;
-  const name = nameInput.value || ('Stick' + (stickmen.length + 1));
-  const stickman = createStickman(300 + Math.random() * 600, 200 + Math.random() * 200, color, name, engine);
-  stickmen.push(stickman);
-});
-
 document.getElementById('spawnDemo').addEventListener('click', () => {
   stickmen.push(createStickman(100 + Math.random() * 1000, 200 + Math.random() * 200, '#ff5b9a', 'artist_1', engine));
   stickmen.push(createStickman(200 + Math.random() * 800, 200 + Math.random() * 200, '#0b66ff', 'dev_1', engine));
+  saveStickmenState();
 });
 
-tickBehavior();
+async function loadStickmenState() {
+  const savedStickmen = await window.electronAPI.loadStickmen();
+  savedStickmen.forEach(data => {
+    let stickman;
+    if (data.isDemo) {
+      stickman = createStickman(data.parts[0].position.x, data.parts[0].position.y, data.color, data.name, engine);
+      stickman.parts.forEach((part, i) => {
+        if (data.parts[i]) {
+          Matter.Body.setPosition(part, data.parts[i].position);
+          Matter.Body.setAngle(part, data.parts[i].angle);
+        }
+      });
+    } else if (data.drawing) {
+      // Re-create the stickman from drawing data
+      const { parts, constraints } = createStickmanFromDrawing(data.drawing.lines, data.drawing.joints, data.color);
+      stickman = {
+        name: data.name,
+        color: data.color,
+        parts,
+        constraints,
+        attrs: data.attrs,
+        state: data.state,
+        target: null,
+        lastHover: false,
+        memory: data.memory || {},
+        drawing: data.drawing,
+      };
+      stickman.parts.forEach((part, i) => {
+        if (data.parts[i]) {
+          Matter.Body.setPosition(part, data.parts[i].position);
+          Matter.Body.setAngle(part, data.parts[i].angle);
+        }
+      });
+    }
+    if (stickman) {
+      stickmen.push(stickman);
+    }
+  });
+}
+
+function createStickmanFromDrawing(drawnLines, rigJoints, color) {
+  // This function encapsulates the rigging logic from finalizeRigBtn
+  // to be reusable for loading.
+  const parts = {};
+  const constraints = [];
+
+  // (The rigging logic from finalizeRigBtn needs to be moved here)
+  const jointMap = {};
+  rigJoints.forEach(joint => {
+    jointMap[joint.type] = jointMap[joint.type] || [];
+    jointMap[joint.type].push({ joint, lines: [] });
+  });
+
+  drawnLines.forEach(line => {
+    const center = { x: (line[0].x + line[line.length - 1].x) / 2, y: (line[0].y + line[line.length - 1].y) / 2 };
+    let closestJointGroup = null;
+    let minDistance = Infinity;
+    Object.values(jointMap).forEach(jointGroup => {
+      jointGroup.forEach(entry => {
+        const dist = distance(center, entry.joint);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestJointGroup = entry;
+        }
+      });
+    });
+    if (closestJointGroup) {
+      closestJointGroup.lines.push(line);
+    }
+  });
+
+  Object.entries(jointMap).forEach(([type, group]) => {
+    group.forEach((entry, index) => {
+      if (entry.lines.length === 0) return;
+
+      const line = entry.lines[0];
+      const start = line[0];
+      const end = line[line.length-1];
+      const length = distance(start, end);
+      const center = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
+      const angle = Math.atan2(end.y - start.y, end.x - start.x);
+
+      let body;
+      if (type === 'head') {
+        body = Bodies.circle(center.x, center.y, length / 2, { render: { fillStyle: color } });
+      } else {
+        body = Bodies.rectangle(center.x, center.y, 5, length, { angle, render: { fillStyle: color } });
+      }
+      parts[`${type}_${index}`] = body;
+    });
+  });
+
+  const head = parts['head_0'];
+  if (head) {
+    Object.entries(parts).forEach(([key, part]) => {
+      if (key === 'head_0') return;
+      const constraint = Constraint.create({
+        bodyA: head,
+        bodyB: part,
+        stiffness: 0.2,
+        length: distance(head.position, part.position)
+      });
+      constraints.push(constraint);
+    });
+  }
+
+  const allParts = Object.values(parts);
+  Composite.add(engine.world, [...allParts, ...constraints]);
+
+  return { parts: allParts, constraints };
+}
+
+function saveStickmenState() {
+  // We need to serialize the stickman data into a format that can be stored.
+  const serializableStickmen = stickmen.map(s => {
+    // For custom-drawn stickmen, save their drawing data.
+    if (s.drawing) {
+      return {
+        name: s.name,
+        color: s.color,
+        attrs: s.attrs,
+        state: s.state,
+        drawing: s.drawing,
+        // Also save the final positions of the created parts for accurate restoration
+        parts: s.parts.map(p => ({ position: p.position, angle: p.angle })),
+      };
+    }
+    // For pre-made stickmen
+    return {
+      name: s.name,
+      color: s.color,
+      attrs: s.attrs,
+      state: s.state,
+      isDemo: true, // Mark as a demo stickman
+      parts: s.parts.map(p => ({ position: p.position, angle: p.angle })),
+    };
+  });
+  window.electronAPI.saveStickmen(serializableStickmen);
+}
+
+
+loadStickmenState().then(() => {
+  tickBehavior();
+});
 
 window.addEventListener('resize', () => {
   canvas.width = window.innerWidth;

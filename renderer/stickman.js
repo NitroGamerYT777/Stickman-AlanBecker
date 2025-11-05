@@ -25,7 +25,21 @@ export function createStickman(x, y, color, name, engine) {
 
   const attrs = personalityFromName(name);
 
-  const stick = { name, parts, constraints: [neck, spine, lShoulder, lElbow, rShoulder, rElbow], color, attrs, state: 'idle', target: null, lastHover: false };
+  const stick = {
+    name,
+    parts,
+    constraints: [neck, spine, lShoulder, lElbow, rShoulder, rElbow],
+    color,
+    attrs,
+    state: 'idle',
+    target: null,
+    lastHover: false,
+    memory: {
+      personality: attrs,
+      learned: {},
+      goals: ['wander'],
+    }
+  };
   return stick;
 }
 
@@ -88,15 +102,28 @@ export function tickStickman(s, mousePos, interactionEnabled, canvas) {
   const chest = s.parts[1];
   Body.rotate(chest, -chest.angle * 0.02);
 
-  if (s.state === 'idle' && s.attrs.goals.includes('wander') && Math.random() < 0.01) {
-    s.state = 'wandering';
-    s.target = {
-      x: Math.random() * canvas.width,
-      y: canvas.height - 50
-    };
-  }
+  // Goal-oriented AI
+  if (s.state === 'idle' && Math.random() < 0.01) {
+    const goal = s.memory.personality.goals[Math.floor(Math.random() * s.memory.personality.goals.length)];
+    s.state = goal; // Set current state to the chosen goal
 
-  if (s.state === 'wandering' && s.target) {
+    if (s.state === 'wander') {
+      s.target = {
+        x: Math.random() * canvas.width,
+        y: canvas.height - 50 // Ground level
+      };
+    } else if (s.state === 'build_something') {
+      console.log(`${s.name} is thinking about building something...`);
+      // Action: Open notepad and type
+      window.electronAPI.openApp('notepad');
+      window.electronAPI.typeString('Hello, World!');
+      s.state = 'idle'; // Reset state after action
+    } else if (s.state === 'create_art') {
+      console.log(`${s.name} wants to create art.`);
+      // Placeholder for drawing action
+      s.state = 'idle';
+    }
+  } else if (s.state === 'wandering' && s.target) {
     const head = s.parts[0];
     const dx = s.target.x - head.position.x;
     if (Math.abs(dx) > 20) {

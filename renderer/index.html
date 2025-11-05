@@ -11,10 +11,15 @@
       <label>Rang: <input type="color" id="colorPicker" value="#0b66ff"></label>
       <button id="drawBtn">Chiz</button>
       <button id="doneDrawingBtn" style="display:none;">Chizib Boldim</button>
-      <button id="uploadBtn">Upload Image</button>
-      <button id="autoRigBtn">Auto-rig</button>
+      <button id="startRiggingBtn" style="display:none;">Rigging Boshlash</button>
       <input id="nameInput" placeholder="Stickman nomi">
-      <button id="createBtn">Yarat</button>
+    </div>
+    <div id="rigging-panel" style="display:none;">
+      <span>Rigging Mode:</span>
+      <button class="rig-joint-btn" data-joint="head">Bosh</button>
+      <button class="rig-joint-btn" data-joint="hand">Qo'l</button>
+      <button class="rig-joint-btn" data-joint="foot">Oyoq</button>
+      <button id="finalizeRigBtn">Yakunlash</button>
     </div>
     <div>
       <button id="toggleInteract">Interaction: ON</button>
